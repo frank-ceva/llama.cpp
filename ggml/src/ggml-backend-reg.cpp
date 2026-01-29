@@ -81,6 +81,10 @@
 #include "ggml-zendnn.h"
 #endif
 
+#ifdef GGML_USE_NPM
+#include "ggml-npm.h"
+#endif
+
 namespace fs = std::filesystem;
 
 static std::string path_str(const fs::path & path) {
@@ -215,6 +219,9 @@ struct ggml_backend_registry {
 #endif
 #ifdef GGML_USE_BLAS
         register_backend(ggml_backend_blas_reg());
+#endif
+#ifdef GGML_USE_NPM
+        register_backend(ggml_backend_npm_reg());
 #endif
 #ifdef GGML_USE_RPC
         register_backend(ggml_backend_rpc_reg());
