@@ -388,6 +388,7 @@ int npm_emu_server_run(npm_emu_server * server) {
            server->config.socket_path,
            npm_sku_to_string(server->config.sku),
            server->l2_size / (1024 * 1024));
+    fflush(stdout);
 
     while (!g_shutdown_requested) {
         // Accept client connection
@@ -410,6 +411,7 @@ int npm_emu_server_run(npm_emu_server * server) {
 
             if (npm_emu_header_validate(&hdr) != 0) {
                 fprintf(stderr, "[Server] Invalid message header\n");
+                fflush(stderr);
                 break;
             }
 
@@ -443,6 +445,7 @@ int npm_emu_server_run(npm_emu_server * server) {
                     break;
                 default:
                     fprintf(stderr, "[Server] Unknown command: 0x%02x\n", hdr.cmd);
+                    fflush(stderr);
                     break;
             }
         }
@@ -458,6 +461,12 @@ int npm_emu_server_run(npm_emu_server * server) {
 }
 
 void npm_emu_server_shutdown(npm_emu_server * server) {
-    (void)server;
     g_shutdown_requested = 1;
+    // Close the listen socket to unblock accept()
+    if (server && server->listen_fd >= 0) {
+        shutdown(server->listen_fd, SHUT_RDWR);
+        close(server->listen_fd);
+        unlink(server->config.socket_path);
+        server->listen_fd = -1;
+    }
 }

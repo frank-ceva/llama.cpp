@@ -52,6 +52,10 @@ static void print_usage(const char * prog) {
 // =============================================================================
 
 int main(int argc, char ** argv) {
+    // Disable stdio buffering for visibility when run as child process
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     npm_emu_config config;
     memset(&config, 0, sizeof(config));
     config.socket_path = NPM_EMU_DEFAULT_SOCKET;
@@ -105,6 +109,7 @@ int main(int argc, char ** argv) {
     g_server = npm_emu_server_create(&config);
     if (!g_server) {
         fprintf(stderr, "Failed to create server\n");
+        fflush(stderr);
         return 1;
     }
 
