@@ -27,6 +27,19 @@ enum npm_sku {
 };
 
 // =============================================================================
+// Data types (mirroring ggml types for standalone usage)
+// When building with ggml, these should match ggml_type values
+// =============================================================================
+
+#ifndef NPM_TYPE_F32
+#define NPM_TYPE_F32  0   // ggml GGML_TYPE_F32
+#define NPM_TYPE_F16  1   // ggml GGML_TYPE_F16
+#define NPM_TYPE_Q4_0 2   // ggml GGML_TYPE_Q4_0
+#define NPM_TYPE_Q4_1 3   // ggml GGML_TYPE_Q4_1
+#define NPM_TYPE_Q8_0 8   // ggml GGML_TYPE_Q8_0
+#endif
+
+// =============================================================================
 // Memory allocation flags
 // =============================================================================
 

@@ -9,9 +9,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unordered_map>
+#include <memory>
 
 #include "npm-types.h"
 #include "npm-emu-protocol.h"
+#include "npm-memory-model.h"
+#include "npm-dma-model.h"
+#include "npm-trace.h"
 
 // =============================================================================
 // Buffer entry
@@ -31,8 +35,13 @@ struct npm_emu_config {
     const char * socket_path;   // Unix socket path
     enum npm_sku sku;           // Device SKU to emulate
     size_t       l2_size;       // L2 cache size (0 = use default for SKU)
-    bool         timing_enabled; // Enable timing simulation
+    bool         tiling_enabled; // Enable tiled matmul execution
+    bool         timing_enabled; // Enable timing/cycle simulation
     bool         verbose;        // Verbose logging
+
+    // Tracing options
+    uint32_t     trace_categories; // Bitmask of npm_trace_category
+    const char * trace_file;       // Trace output file (NULL = stdout)
 };
 
 // =============================================================================
@@ -66,6 +75,13 @@ struct npm_emu_server {
     // Statistics
     uint64_t total_matmul_ops;
     uint64_t total_bytes_transferred;
+
+    // Hardware models (initialized when timing is enabled)
+    std::unique_ptr<npm_memory_hierarchy> mem_hierarchy;
+    std::unique_ptr<npm_dma_model> dma_model;
+
+    // Tracing context
+    npm_trace_ctx* trace_ctx;
 };
 
 // =============================================================================

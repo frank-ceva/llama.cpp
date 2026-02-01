@@ -19,8 +19,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-// Default shared memory size (256 MB)
-#define NPM_EMU_DEFAULT_SHM_SIZE (256 * 1024 * 1024)
+// Default shared memory size (1 GB) - increased for testing with larger models
+#define NPM_EMU_DEFAULT_SHM_SIZE (1024 * 1024 * 1024)
 
 // =============================================================================
 // Emulator device context

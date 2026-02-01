@@ -4,6 +4,9 @@
 add_executable(npm-emulator
     main.cpp
     npm-emu-server.cpp
+    npm-trace.cpp
+    npm-memory-model.cpp
+    npm-dma-model.cpp
 )
 
 target_include_directories(npm-emulator PRIVATE

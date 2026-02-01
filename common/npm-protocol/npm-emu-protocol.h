@@ -120,6 +120,25 @@ struct npm_emu_goodbye_rsp {
 };
 
 // =============================================================================
+// PING command - keep-alive / hello world test
+// =============================================================================
+
+// Request: client sends timestamp and data to echo
+struct npm_emu_ping_req {
+    uint64_t timestamp;         // Client timestamp for RTT measurement
+    uint64_t echo_data;         // Arbitrary data to echo back
+};
+
+// Response: server echoes data and adds its timestamp
+struct npm_emu_ping_rsp {
+    uint8_t  status;
+    uint8_t  reserved[3];
+    uint64_t client_timestamp;  // Echoed back from request
+    uint64_t server_timestamp;  // Server's current timestamp
+    uint64_t echo_data;         // Echoed back from request
+};
+
+// =============================================================================
 // GET_CONFIG command - query device configuration
 // =============================================================================
 

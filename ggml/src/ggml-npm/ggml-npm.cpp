@@ -3,6 +3,7 @@
 #include "ggml-backend-impl.h"
 #include "npm-device/npm-device.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <unordered_map>
@@ -345,6 +346,16 @@ static ggml_backend_buffer_t ggml_backend_npm_device_buffer_from_host_ptr(
     return ggml_backend_cpu_buffer_from_ptr(ptr, size);
 }
 
+// Environment variable to enable CPU fallback logging
+static bool npm_log_cpu_fallback_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("NPM_LOG_CPU_FALLBACK");
+        enabled = (env && (strcmp(env, "1") == 0 || strcmp(env, "true") == 0));
+    }
+    return enabled > 0;
+}
+
 static bool ggml_backend_npm_device_supports_op(ggml_backend_dev_t dev, const struct ggml_tensor * op) {
     (void)dev;
 
@@ -369,14 +380,26 @@ static bool ggml_backend_npm_device_supports_op(ggml_backend_dev_t dev, const st
 
             const int64_t min_batch = 32;
 
-            return ggml_is_contiguous(src0) &&
-                   ggml_is_contiguous(src1) &&
-                   src0->type == GGML_TYPE_F32 &&
-                   src1->type == GGML_TYPE_F32 &&
-                   (ne0 >= min_batch && ne1 >= min_batch && ne10 >= min_batch);
+            bool contiguous_ok = ggml_is_contiguous(src0) && ggml_is_contiguous(src1);
+            bool type_ok = (src0->type == GGML_TYPE_F32 && src1->type == GGML_TYPE_F32);
+            bool size_ok = (ne0 >= min_batch && ne1 >= min_batch && ne10 >= min_batch);
+
+            bool supported = contiguous_ok && type_ok && size_ok;
+
+            if (!supported && npm_log_cpu_fallback_enabled()) {
+                GGML_LOG_INFO("[NPM->CPU] MUL_MAT fallback: contiguous=%d, types=(%s,%s), dims=(%lld,%lld,%lld)\n",
+                              contiguous_ok ? 1 : 0,
+                              ggml_type_name(src0->type), ggml_type_name(src1->type),
+                              (long long)ne0, (long long)ne1, (long long)ne10);
+            }
+
+            return supported;
         }
 
         default:
+            if (npm_log_cpu_fallback_enabled()) {
+                GGML_LOG_INFO("[NPM->CPU] Unsupported op: %s\n", ggml_op_desc(op));
+            }
             return false;
     }
 }
