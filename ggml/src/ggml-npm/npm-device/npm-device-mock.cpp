@@ -120,11 +120,16 @@ static void npm_device_mock_unregister_buffer(struct npm_device * dev, uint64_t 
 }
 
 static int npm_device_mock_update_buffer(struct npm_device * dev, uint64_t handle, void * ptr, size_t size) {
-    (void)dev;
-    (void)handle;
-    (void)ptr;
-    (void)size;
-    // Mock device accesses memory directly, no sync needed
+    struct npm_device_mock_context * ctx = (struct npm_device_mock_context *)dev->context;
+
+    auto it = ctx->buffers.find(handle);
+    if (it == ctx->buffers.end()) {
+        return -1;  // Handle not found
+    }
+
+    // For mock device, just update the pointer and size
+    it->second.ptr = ptr;
+    it->second.size = size;
     return 0;
 }
 
@@ -259,16 +264,4 @@ struct npm_device * npm_device_mock_create(void) {
     return dev;
 }
 
-// =============================================================================
-// Device cleanup
-// =============================================================================
-
-void npm_device_destroy(struct npm_device * dev) {
-    if (dev) {
-        if (dev->ops.shutdown) {
-            dev->ops.shutdown(dev);
-        }
-        delete (npm_device_mock_context *)dev->context;
-        delete dev;
-    }
-}
+// Note: npm_sku_name() and npm_device_destroy() are defined in npm-device-common.cpp

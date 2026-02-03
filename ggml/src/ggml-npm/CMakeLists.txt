@@ -4,47 +4,37 @@
 message(STATUS "Including NPM backend (Ceva NeuPro-M)")
 
 # =============================================================================
-# Device type selection
+# Device type selection - NOW AT RUNTIME
 # =============================================================================
 
-set(NPM_DEVICE_TYPE "mock" CACHE STRING "NPM device implementation (mock, emulator, hardware)")
-set_property(CACHE NPM_DEVICE_TYPE PROPERTY STRINGS mock emulator hardware)
-
-message(STATUS "NPM device type: ${NPM_DEVICE_TYPE}")
+# Compile all device implementations into the binary, selection happens at runtime
+# via NPM_DEVICE environment variable (mock, emulator, hardware)
+message(STATUS "NPM: Compiling all device types (runtime selection via NPM_DEVICE env var)")
 
 # =============================================================================
-# Source files
+# Source files - Include ALL device implementations
 # =============================================================================
 
 set(NPM_SOURCES
     ggml-npm.cpp
+    npm-device/npm-device-common.cpp
+    npm-device/npm-device-mock.cpp
+    npm-device/npm-device-emulator.cpp
 )
 
-# Select device implementation based on NPM_DEVICE_TYPE
-if(NPM_DEVICE_TYPE STREQUAL "mock")
-    message(STATUS "NPM: Using mock device (in-process CPU)")
-    list(APPEND NPM_SOURCES npm-device/npm-device-mock.cpp)
-    set(NPM_DEVICE_DEFINE "NPM_DEVICE_MOCK")
-
-elseif(NPM_DEVICE_TYPE STREQUAL "emulator")
-    message(STATUS "NPM: Using emulator device (IPC to npm-emulator process)")
-    list(APPEND NPM_SOURCES npm-device/npm-device-emulator.cpp)
-    set(NPM_NEED_NETWORK ON)
-    set(NPM_NEED_SHM ON)
-    set(NPM_DEVICE_DEFINE "NPM_DEVICE_EMULATOR")
-
-elseif(NPM_DEVICE_TYPE STREQUAL "hardware")
-    if(NOT NPM_SDK_PATH)
-        message(FATAL_ERROR "NPM_SDK_PATH must be set for hardware device type")
-    endif()
-    message(STATUS "NPM: Using hardware device (real NPM)")
+# Only include hardware device if SDK is available
+if(NPM_SDK_PATH)
     list(APPEND NPM_SOURCES npm-device/npm-device-hardware.cpp)
     set(NPM_USE_SDK ON)
-    set(NPM_DEVICE_DEFINE "NPM_DEVICE_HARDWARE")
-
+    message(STATUS "NPM: Hardware device will be included (SDK found at: ${NPM_SDK_PATH})")
 else()
-    message(FATAL_ERROR "Unknown NPM_DEVICE_TYPE: ${NPM_DEVICE_TYPE}")
+    message(STATUS "NPM: Hardware device not included (NPM_SDK_PATH not set)")
 endif()
+
+# Signal that runtime device selection is enabled
+set(NPM_DEVICE_DEFINE "NPM_DEVICE_RUNTIME_SELECT")
+set(NPM_NEED_NETWORK ON)
+set(NPM_NEED_SHM ON)
 
 # =============================================================================
 # Create the backend library

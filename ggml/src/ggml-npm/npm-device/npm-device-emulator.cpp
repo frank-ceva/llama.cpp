@@ -134,8 +134,16 @@ static int npm_device_emu_init(struct npm_device * dev, int device_id) {
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
 
+    // Set socket timeouts (5 seconds) to avoid hanging if emulator is unresponsive
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    setsockopt(ctx->socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(ctx->socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
     if (connect(ctx->socket_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "[npm-device-emulator] Failed to connect to %s\n", socket_path);
+        fprintf(stderr, "[npm-device-emulator] Failed to connect to emulator at %s\n", socket_path);
+        fprintf(stderr, "[npm-device-emulator] Make sure npm-emulator is running: ./npm-emulator --tiling\n");
         close(ctx->socket_fd);
         ctx->socket_fd = -1;
         return -1;
@@ -318,18 +326,34 @@ static void npm_device_emu_unregister_buffer(struct npm_device * dev, uint64_t h
 static int npm_device_emu_update_buffer(struct npm_device * dev, uint64_t handle, void * ptr, size_t size) {
     npm_device_emu_context * ctx = (npm_device_emu_context *)dev->context;
 
-    // Find the buffer entry by handle
+    // Find the buffer info for this handle
+    size_t shm_offset = (size_t)-1;
+    size_t registered_size = 0;
+
     for (const auto & entry : ctx->buffers) {
         if (entry.second.handle == handle) {
-            // Copy updated data to shared memory
-            void * shm_ptr = npm_shm_get_ptr(ctx->shm, entry.second.shm_offset);
-            memcpy(shm_ptr, ptr, size);
-            return 0;
+            shm_offset = entry.second.shm_offset;
+            registered_size = entry.second.size;
+            break;
         }
     }
 
-    // Handle not found
-    return -1;
+    if (shm_offset == (size_t)-1) {
+        return -1;  // Handle not found
+    }
+
+    if (size > registered_size) {
+        return -2;  // New data is larger than allocated space
+    }
+
+    // Copy new data to shared memory
+    void * shm_ptr = npm_shm_get_ptr(ctx->shm, shm_offset);
+    if (!shm_ptr) {
+        return -3;
+    }
+
+    memcpy(shm_ptr, ptr, size);
+    return 0;
 }
 
 // =============================================================================
@@ -535,16 +559,4 @@ struct npm_device * npm_device_emulator_create(const char * socket_path) {
     return dev;
 }
 
-// =============================================================================
-// Device cleanup
-// =============================================================================
-
-void npm_device_destroy(struct npm_device * dev) {
-    if (dev) {
-        if (dev->ops.shutdown) {
-            dev->ops.shutdown(dev);
-        }
-        delete (npm_device_emu_context *)dev->context;
-        delete dev;
-    }
-}
+// Note: npm_sku_name() and npm_device_destroy() are defined in npm-device-common.cpp
