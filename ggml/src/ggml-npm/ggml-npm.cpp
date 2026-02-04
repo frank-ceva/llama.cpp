@@ -544,7 +544,8 @@ static bool ggml_backend_npm_device_supports_op(ggml_backend_dev_t dev, const st
             const struct ggml_tensor * src1 = op->src[1];  // input
 
             // Minimum batch size - set to 1 for emulation testing
-            const int64_t ne10 = src1->ne[0];
+            const int64_t ne00 = src0->ne[0];  // K dimension (weight columns)
+            const int64_t ne10 = src1->ne[0];  // K dimension (input columns)
             const int64_t ne0 = op->ne[0];
             const int64_t ne1 = op->ne[1];
 
@@ -557,16 +558,61 @@ static bool ggml_backend_npm_device_supports_op(ggml_backend_dev_t dev, const st
             bool weight_type_ok = (src0->type == GGML_TYPE_F32) || ggml_npm_is_quantized_type(src0->type);
             bool output_type_ok = (op->type == GGML_TYPE_F32);
 
+            // Block alignment validation for quantized types
+            // K dimension must be divisible by quantization block size
+            bool alignment_ok = true;
+            if (ggml_npm_is_quantized_type(src0->type)) {
+                switch (src0->type) {
+                    // K-quants: 256 elements per block
+                    case GGML_TYPE_Q2_K:
+                    case GGML_TYPE_Q3_K:
+                    case GGML_TYPE_Q4_K:
+                    case GGML_TYPE_Q5_K:
+                    case GGML_TYPE_Q6_K:
+                        alignment_ok = (ne00 % 256 == 0);
+                        break;
+                    // Standard quants: 32 elements per block
+                    case GGML_TYPE_Q4_0:
+                    case GGML_TYPE_Q4_1:
+                    case GGML_TYPE_Q5_0:
+                    case GGML_TYPE_Q5_1:
+                    case GGML_TYPE_Q8_0:
+                    case GGML_TYPE_Q8_1:
+                        alignment_ok = (ne00 % 32 == 0);
+                        break;
+                    // I-quants: 256 elements per super-block
+                    case GGML_TYPE_IQ2_XXS:
+                    case GGML_TYPE_IQ2_XS:
+                    case GGML_TYPE_IQ2_S:
+                    case GGML_TYPE_IQ3_XXS:
+                    case GGML_TYPE_IQ3_S:
+                    case GGML_TYPE_IQ1_S:
+                    case GGML_TYPE_IQ4_NL:
+                    case GGML_TYPE_IQ4_XS:
+                        alignment_ok = (ne00 % 256 == 0);
+                        break;
+                    // FP16/BF16: no alignment requirements
+                    case GGML_TYPE_F16:
+                    case GGML_TYPE_BF16:
+                        alignment_ok = true;
+                        break;
+                    default:
+                        alignment_ok = true;
+                        break;
+                }
+            }
+
             bool type_ok = input_type_ok && weight_type_ok && output_type_ok;
             bool size_ok = (ne0 >= min_batch && ne1 >= min_batch && ne10 >= min_batch);
 
-            bool supported = contiguous_ok && type_ok && size_ok;
+            bool supported = contiguous_ok && type_ok && size_ok && alignment_ok;
 
             if (!supported && npm_log_cpu_fallback_enabled()) {
-                GGML_LOG_INFO("[NPM->CPU] MUL_MAT fallback: contiguous=%d, types=(%s,%s->%s), dims=(%lld,%lld,%lld)\n",
+                GGML_LOG_INFO("[NPM->CPU] MUL_MAT fallback: contiguous=%d, types=(%s,%s->%s), dims=(%lld,%lld,%lld), alignment=%d\n",
                               contiguous_ok ? 1 : 0,
                               ggml_type_name(src0->type), ggml_type_name(src1->type), ggml_type_name(op->type),
-                              (long long)ne0, (long long)ne1, (long long)ne10);
+                              (long long)ne0, (long long)ne1, (long long)ne00,
+                              alignment_ok ? 1 : 0);
             }
 
             return supported;
