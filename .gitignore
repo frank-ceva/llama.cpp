@@ -121,6 +121,12 @@ poetry.toml
 /tests/test-tokenizer-1-bpe
 /tests/test-tokenizer-1-spm
 
+# NPM backend tests
+/tests/npm/test-npm-backend
+/tests/npm/test-npm-device
+/tests/npm/test-npm-emulator
+/tests/npm/test-npm-inference
+
 # Scripts
 !/scripts/install-oneapi.bat
 
