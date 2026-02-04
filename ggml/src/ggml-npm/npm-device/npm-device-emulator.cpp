@@ -19,8 +19,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-// Default shared memory size (1 GB) - increased for testing with larger models
-#define NPM_EMU_DEFAULT_SHM_SIZE (1024 * 1024 * 1024)
+// Default shared memory size (1.5 GB) - for dequantized weights
+#define NPM_EMU_DEFAULT_SHM_SIZE (1536ULL * 1024 * 1024)
 
 // =============================================================================
 // Emulator device context
@@ -315,6 +315,23 @@ static void npm_device_emu_unregister_buffer(struct npm_device * dev, uint64_t h
     recv_response(ctx, &hdr, &rsp, sizeof(rsp));
 }
 
+static int npm_device_emu_update_buffer(struct npm_device * dev, uint64_t handle, void * ptr, size_t size) {
+    npm_device_emu_context * ctx = (npm_device_emu_context *)dev->context;
+
+    // Find the buffer entry by handle
+    for (const auto & entry : ctx->buffers) {
+        if (entry.second.handle == handle) {
+            // Copy updated data to shared memory
+            void * shm_ptr = npm_shm_get_ptr(ctx->shm, entry.second.shm_offset);
+            memcpy(shm_ptr, ptr, size);
+            return 0;
+        }
+    }
+
+    // Handle not found
+    return -1;
+}
+
 // =============================================================================
 // Helper: get shm offset for a handle
 // =============================================================================
@@ -501,6 +518,7 @@ struct npm_device * npm_device_emulator_create(const char * socket_path) {
     dev->ops.get_l2_size = npm_device_emu_get_l2_size;
     dev->ops.register_buffer = npm_device_emu_register_buffer;
     dev->ops.unregister_buffer = npm_device_emu_unregister_buffer;
+    dev->ops.update_buffer = npm_device_emu_update_buffer;
     dev->ops.matmul = npm_device_emu_matmul;
     dev->ops.sync = npm_device_emu_sync;
     dev->ops.fence_create = npm_device_emu_fence_create;
@@ -518,21 +536,8 @@ struct npm_device * npm_device_emulator_create(const char * socket_path) {
 }
 
 // =============================================================================
-// Utility functions (shared across implementations)
+// Device cleanup
 // =============================================================================
-
-const char * npm_sku_name(enum npm_sku sku) {
-    switch (sku) {
-        case NPM_SKU_4K:       return "NPM4K";
-        case NPM_SKU_8K:       return "NPM8K";
-        case NPM_SKU_16K:      return "NPM16K";
-        case NPM_SKU_32K:      return "NPM32K";
-        case NPM_SKU_64K:      return "NPM64K";
-        case NPM_SKU_MOCK:     return "Mock";
-        case NPM_SKU_EMULATOR: return "Emulator";
-        default:               return "Unknown";
-    }
-}
 
 void npm_device_destroy(struct npm_device * dev) {
     if (dev) {

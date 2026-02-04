@@ -119,6 +119,15 @@ static void npm_device_mock_unregister_buffer(struct npm_device * dev, uint64_t 
     ctx->buffers.erase(handle);
 }
 
+static int npm_device_mock_update_buffer(struct npm_device * dev, uint64_t handle, void * ptr, size_t size) {
+    (void)dev;
+    (void)handle;
+    (void)ptr;
+    (void)size;
+    // Mock device accesses memory directly, no sync needed
+    return 0;
+}
+
 // =============================================================================
 // Helper: resolve handle to pointer
 // =============================================================================
@@ -233,6 +242,7 @@ struct npm_device * npm_device_mock_create(void) {
     dev->ops.get_l2_size = npm_device_mock_get_l2_size;
     dev->ops.register_buffer = npm_device_mock_register_buffer;
     dev->ops.unregister_buffer = npm_device_mock_unregister_buffer;
+    dev->ops.update_buffer = npm_device_mock_update_buffer;
     dev->ops.matmul = npm_device_mock_matmul;
     dev->ops.sync = npm_device_mock_sync;
     dev->ops.fence_create = npm_device_mock_fence_create;
@@ -250,21 +260,8 @@ struct npm_device * npm_device_mock_create(void) {
 }
 
 // =============================================================================
-// Utility functions (shared across implementations)
+// Device cleanup
 // =============================================================================
-
-const char * npm_sku_name(enum npm_sku sku) {
-    switch (sku) {
-        case NPM_SKU_4K:      return "NPM4K";
-        case NPM_SKU_8K:      return "NPM8K";
-        case NPM_SKU_16K:     return "NPM16K";
-        case NPM_SKU_32K:     return "NPM32K";
-        case NPM_SKU_64K:     return "NPM64K";
-        case NPM_SKU_MOCK:    return "Mock";
-        case NPM_SKU_EMULATOR: return "Emulator";
-        default:              return "Unknown";
-    }
-}
 
 void npm_device_destroy(struct npm_device * dev) {
     if (dev) {

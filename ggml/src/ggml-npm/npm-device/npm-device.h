@@ -122,6 +122,11 @@ struct npm_device_ops {
     // Unregister a previously registered buffer
     void (*unregister_buffer)(struct npm_device * dev, uint64_t handle);
 
+    // Update buffer data in device memory (for emulator: sync to shared memory)
+    // Called when buffer content has changed and needs to be synced before compute
+    // Returns 0 on success, negative error code on failure
+    int (*update_buffer)(struct npm_device * dev, uint64_t handle, void * ptr, size_t size);
+
     // -------------------------------------------------------------------------
     // Compute operations
     // -------------------------------------------------------------------------
