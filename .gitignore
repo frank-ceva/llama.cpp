@@ -144,3 +144,6 @@ poetry.toml
 /.windsurf/
 # emscripten
 a.out.*
+
+# Claude Code plugin state
+.omc/
