@@ -17,9 +17,13 @@ struct ggml_backend_npm_context {
     struct npm_device * dev;
     int device_id;
 
-    // Buffer registration cache: tensor data ptr -> device handle
+    // Buffer registration cache: tensor data ptr -> device handle + size
     // Buffers are registered lazily on first use
-    std::unordered_map<void *, uint64_t> buffer_handles;
+    struct buffer_reg_info {
+        uint64_t handle;
+        size_t size;
+    };
+    std::unordered_map<void *, buffer_reg_info> buffer_handles;
 
     // Dequantization buffer for quantized matmul
     // Reused across calls to avoid repeated allocations
@@ -93,16 +97,27 @@ static uint64_t ggml_backend_npm_get_buffer_handle_ex(
         // Check if already registered
         auto it = ctx->buffer_handles.find(ptr);
         if (it != ctx->buffer_handles.end()) {
-            if (npm_debug) fprintf(stderr, "[NPM] Found cached handle=%lu\n", (unsigned long)it->second);
-
-            // If update_data is true, sync current data to shared memory
-            if (update_data && ctx->dev->ops.update_buffer) {
-                int result = ctx->dev->ops.update_buffer(ctx->dev, it->second, ptr, size);
-                if (result != 0 && npm_debug) {
-                    fprintf(stderr, "[NPM] Warning: update_buffer failed for cached handle=%lu\n", (unsigned long)it->second);
+            // If the new size exceeds what was registered, unregister and re-register
+            if (size > it->second.size) {
+                if (npm_debug) fprintf(stderr, "[NPM] Size grew: cached=%zu new=%zu, re-registering handle=%lu\n",
+                    it->second.size, size, (unsigned long)it->second.handle);
+                if (ctx->dev->ops.unregister_buffer) {
+                    ctx->dev->ops.unregister_buffer(ctx->dev, it->second.handle);
                 }
+                ctx->buffer_handles.erase(it);
+                // Fall through to register with new size
+            } else {
+                if (npm_debug) fprintf(stderr, "[NPM] Found cached handle=%lu (size=%zu)\n", (unsigned long)it->second.handle, it->second.size);
+
+                // If update_data is true, sync current data to shared memory
+                if (update_data && ctx->dev->ops.update_buffer) {
+                    int result = ctx->dev->ops.update_buffer(ctx->dev, it->second.handle, ptr, size);
+                    if (result != 0 && npm_debug) {
+                        fprintf(stderr, "[NPM] Warning: update_buffer failed for cached handle=%lu\n", (unsigned long)it->second.handle);
+                    }
+                }
+                return it->second.handle;
             }
-            return it->second;
         }
     }
 
@@ -128,7 +143,7 @@ static uint64_t ggml_backend_npm_get_buffer_handle_ex(
     if (npm_debug) fprintf(stderr, "[NPM] Registered handle=%lu\n", (unsigned long)handle);
 
     if (!skip_cache) {
-        ctx->buffer_handles[ptr] = handle;
+        ctx->buffer_handles[ptr] = { handle, size };
     }
     return handle;
 }
@@ -386,7 +401,7 @@ static void ggml_backend_npm_free(ggml_backend_t backend) {
 
     // Unregister all buffers
     for (auto & entry : ctx->buffer_handles) {
-        ctx->dev->ops.unregister_buffer(ctx->dev, entry.second);
+        ctx->dev->ops.unregister_buffer(ctx->dev, entry.second.handle);
     }
     ctx->buffer_handles.clear();
 
